@@ -2,6 +2,7 @@
 
 APP_DIR=/var/www/langchain-app
 SOURCE_DIR=/home/ubuntu/myapp
+VENV_DIR=/home/ubuntu/myapp_venv
 
 echo "Deleting old app folder if exists..."
 sudo rm -rf $APP_DIR
@@ -12,36 +13,34 @@ sudo mkdir -p $APP_DIR
 echo "Moving files to app folder..."
 sudo mv $SOURCE_DIR/* $APP_DIR/
 
-# Navigate to the app directory
-cd $APP_DIR
-
-# Move .env file if exists
-if [ -f env ]; then
-    mv env .env
+# Move .env file
+if [ -f $APP_DIR/env ]; then
+    mv $APP_DIR/env $APP_DIR/.env
 fi
 
-# Install Python, pip, and venv if missing
+# Install python, pip, and venv if missing
 echo "Installing python3, pip, and venv..."
 sudo apt-get update
 sudo apt-get install -y python3 python3-pip python3-venv
 
-# Create virtual environment if not exists
-if [ ! -d venv ]; then
-    echo "Creating virtual environment..."
-    python3 -m venv venv
-fi
+# Remove old venv if exists
+rm -rf $VENV_DIR
 
-# Activate virtual environment
-source venv/bin/activate
+# Create virtual environment in home directory (no sudo)
+echo "Creating virtual environment..."
+python3 -m venv $VENV_DIR
 
-# Upgrade pip and install Python dependencies
+# Activate venv
+source $VENV_DIR/bin/activate
+
+# Upgrade pip and install dependencies
 echo "Upgrading pip and installing dependencies..."
 pip install --upgrade pip
-if [ -f requirements.txt ]; then
-    pip install -r requirements.txt
+if [ -f $APP_DIR/requirements.txt ]; then
+    pip install -r $APP_DIR/requirements.txt
 fi
 
-# Install Gunicorn inside venv
+# Install Gunicorn in venv
 pip install gunicorn
 
 # Install Nginx if missing
@@ -71,12 +70,12 @@ else
     echo "Nginx reverse proxy already configured."
 fi
 
-# Stop any running Gunicorn process
+# Stop old Gunicorn
 pkill gunicorn || true
-rm -f myapp.sock
+rm -f $APP_DIR/myapp.sock
 
-# Start Gunicorn using venv (without sudo)
+# Start Gunicorn from venv
 echo "Starting Gunicorn..."
-venv/bin/gunicorn --workers 3 --bind unix:myapp.sock main:app --user www-data --group www-data --daemon
+$VENV_DIR/bin/gunicorn --workers 3 --bind unix:$APP_DIR/myapp.sock main:app --user www-data --group www-data --daemon
 echo "Gunicorn started 🚀"
 echo "Deployment completed!"

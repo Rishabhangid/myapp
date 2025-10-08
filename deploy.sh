@@ -15,27 +15,34 @@ sudo mv $SOURCE_DIR/* $APP_DIR/
 # Navigate to the app directory
 cd $APP_DIR
 
-# Move .env file
+# Move .env file if exists
 if [ -f env ]; then
-    sudo mv env .env
+    mv env .env
 fi
 
-# Install Python & pip if missing
-echo "Installing python3 and pip..."
+# Install Python, pip, and venv if missing
+echo "Installing python3, pip, and venv..."
 sudo apt-get update
 sudo apt-get install -y python3 python3-pip python3-venv
 
-# Set up virtual environment
-echo "Setting up virtual environment..."
-python3 -m venv venv
+# Create virtual environment if not exists
+if [ ! -d venv ]; then
+    echo "Creating virtual environment..."
+    python3 -m venv venv
+fi
+
+# Activate virtual environment
 source venv/bin/activate
 
-# Upgrade pip and install dependencies
+# Upgrade pip and install Python dependencies
 echo "Upgrading pip and installing dependencies..."
 pip install --upgrade pip
 if [ -f requirements.txt ]; then
     pip install -r requirements.txt
 fi
+
+# Install Gunicorn inside venv
+pip install gunicorn
 
 # Install Nginx if missing
 if ! command -v nginx > /dev/null; then
@@ -45,18 +52,19 @@ fi
 
 # Configure Nginx reverse proxy
 if [ ! -f /etc/nginx/sites-available/myapp ]; then
+    echo "Configuring Nginx..."
     sudo rm -f /etc/nginx/sites-enabled/default
-    sudo bash -c 'cat > /etc/nginx/sites-available/myapp <<EOF
+    sudo bash -c "cat > /etc/nginx/sites-available/myapp <<EOF
 server {
     listen 80;
     server_name _;
 
     location / {
         include proxy_params;
-        proxy_pass http://unix:'$APP_DIR'/myapp.sock;
+        proxy_pass http://unix:$APP_DIR/myapp.sock;
     }
 }
-EOF'
+EOF"
     sudo ln -s /etc/nginx/sites-available/myapp /etc/nginx/sites-enabled
     sudo systemctl restart nginx
 else
@@ -64,11 +72,11 @@ else
 fi
 
 # Stop any running Gunicorn process
-sudo pkill gunicorn || true
-sudo rm -f myapp.sock
+pkill gunicorn || true
+rm -f myapp.sock
 
-# Start Gunicorn
+# Start Gunicorn using venv (without sudo)
 echo "Starting Gunicorn..."
-sudo $APP_DIR/venv/bin/gunicorn --workers 3 --bind unix:myapp.sock main:app --user www-data --group www-data --daemon
+venv/bin/gunicorn --workers 3 --bind unix:myapp.sock main:app --user www-data --group www-data --daemon
 echo "Gunicorn started 🚀"
 echo "Deployment completed!"

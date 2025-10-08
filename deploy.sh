@@ -88,6 +88,7 @@ rm -f $SOCKET_FILE
 # 6. Start Gunicorn
 # ---------------------------
 echo "Starting Gunicorn..."
+cd $APP_DIR
 $VENV_DIR/bin/gunicorn \
     --workers 3 \
     --bind unix:$SOCKET_FILE \

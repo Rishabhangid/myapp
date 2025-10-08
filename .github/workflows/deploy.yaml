@@ -34,7 +34,7 @@ jobs:
       # 4️⃣ Copy files to remote server using SCP
       - name: Copy files to remote server 🚙
         run: |
-          scp -i ~/.ssh/id_rsa -r ./app/* ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:/home/ubuntu/
+          scp -i ~/.ssh/id_rsa -r ./* ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:/home/ubuntu/
 
       # 5️⃣ Run Bash script to deploy the app
       - name: Run Bash Script To Deploy App 🚀

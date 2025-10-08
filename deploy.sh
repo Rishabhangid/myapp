@@ -95,6 +95,18 @@ $VENV_DIR/bin/gunicorn main:app \
 # ---------------------------
 # 7. Set socket permissions for Nginx
 # ---------------------------
+TIMEOUT=15
+echo "Waiting for Gunicorn socket to be created..."
+while [ ! -S $SOCKET_FILE ] && [ $TIMEOUT -gt 0 ]; do
+    sleep 1
+    TIMEOUT=$((TIMEOUT-1))
+done
+
+if [ ! -S $SOCKET_FILE ]; then
+    echo "Error: Gunicorn socket not created!"
+    exit 1
+fi
+
 sudo chown www-data:www-data $SOCKET_FILE
 sudo chmod 660 $SOCKET_FILE
 

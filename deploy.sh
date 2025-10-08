@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e  # Exit on any error
 
 # ---------------------------
 # Paths
@@ -6,7 +7,7 @@
 APP_DIR=/var/www/langchain-app
 SOURCE_DIR=/home/ubuntu/myapp
 VENV_DIR=/home/ubuntu/myapp_venv
-SOCKET_FILE=$APP_DIR/myapp.sock   # Socket inside app directory, writable
+SOCKET_FILE=$APP_DIR/myapp.sock
 
 # ---------------------------
 # 1. Cleanup old app
@@ -30,27 +31,21 @@ if [ -f $APP_DIR/env ]; then
 fi
 
 # ---------------------------
-# 3. Install Python, pip, and venv
+# 3. Install Python, pip, venv
 # ---------------------------
 echo "Installing Python, pip, and venv..."
 sudo apt-get update
 sudo apt-get install -y python3 python3-pip python3-venv
 
-# Remove old venv
 rm -rf $VENV_DIR
-
-echo "Creating virtual environment..."
 python3 -m venv $VENV_DIR
-
-# Upgrade pip and install dependencies
-echo "Upgrading pip and installing dependencies..."
 $VENV_DIR/bin/pip install --upgrade pip
 
 if [ -f $APP_DIR/requirements.txt ]; then
     $VENV_DIR/bin/pip install -r $APP_DIR/requirements.txt
 fi
 
-# Always ensure Gunicorn + Uvicorn workers installed
+# Ensure Gunicorn + Uvicorn installed
 $VENV_DIR/bin/pip install gunicorn uvicorn
 
 # ---------------------------
@@ -77,8 +72,6 @@ server {
 EOF"
     sudo ln -sf /etc/nginx/sites-available/myapp /etc/nginx/sites-enabled
     sudo systemctl restart nginx
-else
-    echo "Nginx reverse proxy already configured."
 fi
 
 # ---------------------------
@@ -88,21 +81,36 @@ pkill gunicorn || true
 rm -f $SOCKET_FILE
 
 # ---------------------------
-# 6. Start Gunicorn with Uvicorn workers
+# 6. Start Gunicorn (wait for socket)
 # ---------------------------
 echo "Starting Gunicorn with Uvicorn workers..."
 cd $APP_DIR
 
+# Start Gunicorn in background and capture PID
 $VENV_DIR/bin/gunicorn main:app \
     --workers 3 \
     --worker-class uvicorn.workers.UvicornWorker \
-    --bind unix:$SOCKET_FILE \
-    --daemon
+    --bind unix:$SOCKET_FILE &
+
+GUNICORN_PID=$!
+
+# Wait until socket exists
+echo "Waiting for socket to be created..."
+TIMEOUT=15  # seconds
+while [ ! -S $SOCKET_FILE ] && [ $TIMEOUT -gt 0 ]; do
+    sleep 1
+    TIMEOUT=$((TIMEOUT-1))
+done
+
+if [ ! -S $SOCKET_FILE ]; then
+    echo "Error: socket not created!"
+    kill $GUNICORN_PID
+    exit 1
+fi
 
 # ---------------------------
 # 7. Set socket permissions for Nginx
 # ---------------------------
-echo "Setting socket permissions for Nginx..."
 sudo chown www-data:www-data $SOCKET_FILE
 sudo chmod 660 $SOCKET_FILE
 

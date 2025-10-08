@@ -1,55 +1,61 @@
 #!/bin/bash
 
+# ---------------------------
+# Paths
+# ---------------------------
 APP_DIR=/var/www/langchain-app
 SOURCE_DIR=/home/ubuntu/myapp
 VENV_DIR=/home/ubuntu/myapp_venv
+SOCKET_FILE=$APP_DIR/myapp.sock
 
+# ---------------------------
+# 1. Cleanup old app
+# ---------------------------
 echo "Deleting old app folder if exists..."
 sudo rm -rf $APP_DIR
 
 echo "Creating app folder..."
 sudo mkdir -p $APP_DIR
+sudo chown ubuntu:ubuntu $APP_DIR
 
 echo "Moving files to app folder..."
 sudo mv $SOURCE_DIR/* $APP_DIR/
+sudo chown -R ubuntu:ubuntu $APP_DIR
 
-# Move .env file
+# ---------------------------
+# 2. Move .env
+# ---------------------------
 if [ -f $APP_DIR/env ]; then
     mv $APP_DIR/env $APP_DIR/.env
 fi
 
-# Install python, pip, and venv if missing
+# ---------------------------
+# 3. Install Python & venv
+# ---------------------------
 echo "Installing python3, pip, and venv..."
 sudo apt-get update
 sudo apt-get install -y python3 python3-pip python3-venv
 
-# Remove old venv if exists
+# Remove old venv
 rm -rf $VENV_DIR
 
-# Create virtual environment in home directory (no sudo)
 echo "Creating virtual environment..."
 python3 -m venv $VENV_DIR
 
-# Activate venv
-source $VENV_DIR/bin/activate
-
 # Upgrade pip and install dependencies
 echo "Upgrading pip and installing dependencies..."
-pip install --upgrade pip
-if [ -f $APP_DIR/requirements.txt ]; then
-    pip install -r $APP_DIR/requirements.txt
-fi
+$VENV_DIR/bin/pip install --upgrade pip
+$VENV_DIR/bin/pip install -r $APP_DIR/requirements.txt
+$VENV_DIR/bin/pip install gunicorn
 
-# Install Gunicorn in venv
-pip install gunicorn
-
-# Install Nginx if missing
+# ---------------------------
+# 4. Install & configure Nginx
+# ---------------------------
 if ! command -v nginx > /dev/null; then
     echo "Installing Nginx..."
     sudo apt-get install -y nginx
 fi
 
-# Configure Nginx reverse proxy
 if [ ! -f /etc/nginx/sites-available/myapp ]; then
     echo "Configuring Nginx..."
     sudo rm -f /etc/nginx/sites-enabled/default
@@ -60,7 +66,7 @@ server {
 
     location / {
         include proxy_params;
-        proxy_pass http://unix:$APP_DIR/myapp.sock;
+        proxy_pass http://unix:$SOCKET_FILE;
     }
 }
 EOF"
@@ -70,12 +76,23 @@ else
     echo "Nginx reverse proxy already configured."
 fi
 
-# Stop old Gunicorn
-pkill gunicorn || true
-rm -f $APP_DIR/myapp.sock
+# ---------------------------
+# 5. Stop old Gunicorn
+# ---------------------------
+sudo pkill gunicorn || true
+sudo rm -f $SOCKET_FILE
 
-# Start Gunicorn from venv
+# ---------------------------
+# 6. Start Gunicorn
+# ---------------------------
 echo "Starting Gunicorn..."
-$VENV_DIR/bin/gunicorn --workers 3 --bind unix:$APP_DIR/myapp.sock main:app --user www-data --group www-data --daemon
+sudo $VENV_DIR/bin/gunicorn \
+    --workers 3 \
+    --bind unix:$SOCKET_FILE \
+    main:app \
+    --user www-data \
+    --group www-data \
+    --daemon
+
 echo "Gunicorn started 🚀"
 echo "Deployment completed!"

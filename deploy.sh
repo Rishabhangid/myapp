@@ -6,7 +6,7 @@
 APP_DIR=/var/www/langchain-app
 SOURCE_DIR=/home/ubuntu/myapp
 VENV_DIR=/home/ubuntu/myapp_venv
-SOCKET_FILE=$APP_DIR/myapp.sock
+SOCKET_FILE=/home/ubuntu/myapp.sock   # Create socket in a user-writable directory
 
 # ---------------------------
 # 1. Cleanup old app
@@ -45,7 +45,9 @@ python3 -m venv $VENV_DIR
 # Upgrade pip and install dependencies
 echo "Upgrading pip and installing dependencies..."
 $VENV_DIR/bin/pip install --upgrade pip
-$VENV_DIR/bin/pip install -r $APP_DIR/requirements.txt
+if [ -f $APP_DIR/requirements.txt ]; then
+    $VENV_DIR/bin/pip install -r $APP_DIR/requirements.txt
+fi
 $VENV_DIR/bin/pip install gunicorn
 
 # ---------------------------
@@ -79,20 +81,26 @@ fi
 # ---------------------------
 # 5. Stop old Gunicorn
 # ---------------------------
-sudo pkill gunicorn || true
-sudo rm -f $SOCKET_FILE
+pkill gunicorn || true
+rm -f $SOCKET_FILE
 
 # ---------------------------
 # 6. Start Gunicorn
 # ---------------------------
 echo "Starting Gunicorn..."
-sudo $VENV_DIR/bin/gunicorn \
+$VENV_DIR/bin/gunicorn \
     --workers 3 \
     --bind unix:$SOCKET_FILE \
     main:app \
-    --user www-data \
-    --group www-data \
     --daemon
+
+# ---------------------------
+# 7. Set socket permissions for Nginx
+# ---------------------------
+echo "Setting socket permissions for Nginx..."
+sudo chown www-data:www-data $SOCKET_FILE
+sudo chmod 660 $SOCKET_FILE
 
 echo "Gunicorn started 🚀"
 echo "Deployment completed!"
+echo "Visit your server's IP address to see the app."

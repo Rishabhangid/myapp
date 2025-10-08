@@ -6,7 +6,7 @@
 APP_DIR=/var/www/langchain-app
 SOURCE_DIR=/home/ubuntu/myapp
 VENV_DIR=/home/ubuntu/myapp_venv
-SOCKET_FILE=/home/ubuntu/myapp.sock   # Create socket in a user-writable directory
+SOCKET_FILE=$APP_DIR/myapp.sock   # Socket inside app directory, writable
 
 # ---------------------------
 # 1. Cleanup old app
@@ -23,16 +23,16 @@ sudo mv $SOURCE_DIR/* $APP_DIR/
 sudo chown -R ubuntu:ubuntu $APP_DIR
 
 # ---------------------------
-# 2. Move .env
+# 2. Move .env if exists
 # ---------------------------
 if [ -f $APP_DIR/env ]; then
     mv $APP_DIR/env $APP_DIR/.env
 fi
 
 # ---------------------------
-# 3. Install Python & venv
+# 3. Install Python, pip, and venv
 # ---------------------------
-echo "Installing python3, pip, and venv..."
+echo "Installing Python, pip, and venv..."
 sudo apt-get update
 sudo apt-get install -y python3 python3-pip python3-venv
 
@@ -45,10 +45,13 @@ python3 -m venv $VENV_DIR
 # Upgrade pip and install dependencies
 echo "Upgrading pip and installing dependencies..."
 $VENV_DIR/bin/pip install --upgrade pip
+
 if [ -f $APP_DIR/requirements.txt ]; then
     $VENV_DIR/bin/pip install -r $APP_DIR/requirements.txt
 fi
-$VENV_DIR/bin/pip install gunicorn
+
+# Always ensure Gunicorn + Uvicorn workers installed
+$VENV_DIR/bin/pip install gunicorn uvicorn
 
 # ---------------------------
 # 4. Install & configure Nginx
@@ -72,7 +75,7 @@ server {
     }
 }
 EOF"
-    sudo ln -s /etc/nginx/sites-available/myapp /etc/nginx/sites-enabled
+    sudo ln -sf /etc/nginx/sites-available/myapp /etc/nginx/sites-enabled
     sudo systemctl restart nginx
 else
     echo "Nginx reverse proxy already configured."
@@ -85,14 +88,15 @@ pkill gunicorn || true
 rm -f $SOCKET_FILE
 
 # ---------------------------
-# 6. Start Gunicorn
+# 6. Start Gunicorn with Uvicorn workers
 # ---------------------------
-echo "Starting Gunicorn..."
+echo "Starting Gunicorn with Uvicorn workers..."
 cd $APP_DIR
-$VENV_DIR/bin/gunicorn \
+
+$VENV_DIR/bin/gunicorn main:app \
     --workers 3 \
+    --worker-class uvicorn.workers.UvicornWorker \
     --bind unix:$SOCKET_FILE \
-    main:app \
     --daemon
 
 # ---------------------------

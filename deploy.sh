@@ -81,32 +81,16 @@ pkill gunicorn || true
 rm -f $SOCKET_FILE
 
 # ---------------------------
-# 6. Start Gunicorn (wait for socket)
+# 6. Start Gunicorn in daemon mode
 # ---------------------------
-echo "Starting Gunicorn with Uvicorn workers..."
+echo "Starting Gunicorn with Uvicorn workers in daemon mode..."
 cd $APP_DIR
 
-# Start Gunicorn in background and capture PID
 $VENV_DIR/bin/gunicorn main:app \
     --workers 3 \
     --worker-class uvicorn.workers.UvicornWorker \
-    --bind unix:$SOCKET_FILE &
-
-GUNICORN_PID=$!
-
-# Wait until socket exists
-echo "Waiting for socket to be created..."
-TIMEOUT=15  # seconds
-while [ ! -S $SOCKET_FILE ] && [ $TIMEOUT -gt 0 ]; do
-    sleep 1
-    TIMEOUT=$((TIMEOUT-1))
-done
-
-if [ ! -S $SOCKET_FILE ]; then
-    echo "Error: socket not created!"
-    kill $GUNICORN_PID
-    exit 1
-fi
+    --bind unix:$SOCKET_FILE \
+    --daemon
 
 # ---------------------------
 # 7. Set socket permissions for Nginx

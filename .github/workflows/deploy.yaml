@@ -3,7 +3,7 @@ name: Deploy to EC2 🚀
 on:
   push:
     branches:
-      - "main" # Trigger workflow on push to main branch
+      - main  # Trigger workflow on push to main branch
 
 jobs:
   deploy:
@@ -11,37 +11,28 @@ jobs:
 
     steps:
       # 1️⃣ Checkout the repository
-      - name: Checkout current branch ✅
+      - name: Checkout repository ✅
         uses: actions/checkout@v2
 
-      # 2️⃣ Set up SSH key and whitelist EC2 IP address
-      - name: Set up SSH key and whitelist EC2 IP address 🐻‍❄️
+      # 2️⃣ Set up SSH key
+      - name: Set up SSH key 🐻‍❄️
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.EC2_SSH_KEY }}" | tr -d '\r' > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
 
-      # 3️⃣ Create .env file dynamically
-      - name: Create .env file dynamically 🧨
-        env:
-          ENV: ${{ secrets.ENV }}
-          EC2_USERNAME: ${{ secrets.EC2_USERNAME }}
+      # 3️⃣ Copy repository files to EC2
+      - name: Copy files to EC2 🚙
         run: |
-          echo "ENV=${ENV}" >> env
-          echo "EC2_USERNAME=${EC2_USERNAME}" >> env
+          rsync -av --exclude='.github' -e "ssh -i ~/.ssh/id_rsa" ./ ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:/home/ubuntu/myapp/
 
-      # 4️⃣ Copy files to remote server using SCP
-      - name: Copy files to remote server 🚙
+      # 4️⃣ Run deploy.sh on EC2
+      - name: Run deploy script on EC2 🚀
         run: |
-          scp -i ~/.ssh/id_rsa -r ./* ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:/home/ubuntu/
+          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} "cd /home/ubuntu/myapp && chmod +x deploy.sh && ./deploy.sh"
 
-      # 5️⃣ Run Bash script to deploy the app
-      - name: Run Bash Script To Deploy App 🚀
-        run: |
-          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} "chmod +x ./deploy.sh && ./deploy.sh"
-
-      # 6️⃣ Clean up SSH key
+      # 5️⃣ Clean up SSH key
       - name: Clean up SSH key 🧹
         if: always()
         run: rm -f ~/.ssh/id_rsa
